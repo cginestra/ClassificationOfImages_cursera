@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import time
+import os
 from matplotlib import pyplot as plt
 
 def ejercicio1():
@@ -80,7 +81,6 @@ def matching(image1, image2):
     plt.imshow(img3), plt.show()
 
 
-
 def drawMatches(img1, kp1, img2, kp2, matches):
     """
     My own implementation of cv2.drawMatches as OpenCV 2.4.9
@@ -155,7 +155,115 @@ def drawMatches(img1, kp1, img2, kp2, matches):
 
 def calculate_distance(image1, image2):
 
-    return 0
+    kp1,des1 = get_N_sift_points(image1, n_points=0)
+    kp2,des2 = get_N_sift_points(image2, n_points=0)
+
+    cum_dist = 0
+    for point1 in des1:
+        min_dist = 10000
+        for point2 in des2:
+            partial_dist = np.linalg.norm(point2-point1)
+            if partial_dist < min_dist: min_dist = partial_dist
+
+        cum_dist += min_dist
+    d_12 = cum_dist / len(des1)
+
+    cum_dist = 0
+    for point2 in des2:
+        min_dist = 10000
+        for point1 in des1:
+            partial_dist = np.linalg.norm(point1-point2)
+            if partial_dist < min_dist: min_dist = partial_dist
+
+        cum_dist += min_dist
+    d_21 = cum_dist / len(des2)
+
+    return (d_12 + d_21) / 2
+
+def calculate_distance_from_image_vectors(des1, des2):
+
+    cum_dist = 0
+    for point1 in des1:
+        min_dist = 10000
+        for point2 in des2:
+            partial_dist = np.linalg.norm(point2-point1)
+            if partial_dist < min_dist: min_dist = partial_dist
+
+        cum_dist += min_dist
+    d_12 = cum_dist / len(des1)
+
+    cum_dist = 0
+    for point2 in des2:
+        min_dist = 10000
+        for point1 in des1:
+            partial_dist = np.linalg.norm(point1-point2)
+            if partial_dist < min_dist: min_dist = partial_dist
+
+        cum_dist += min_dist
+    d_21 = cum_dist / len(des2)
+
+    return (d_12 + d_21) / 2
+
+def train_knn(train_path):
+    classes = os.listdir(train_path)
+    trained_data = []
+    ntag = 0
+    for tag in classes:
+        images_names = os.listdir(train_path + '/' + tag)
+
+        for image in images_names:
+            gray = cv2.imread(train_path + '/' + tag + '/' + image)
+            gray = cv2.cvtColor(gray, cv2.COLOR_BGR2GRAY)
+            kp,des = get_N_sift_points(gray,n_points=0)
+            image_data = [des, ntag]
+            trained_data.append(image_data)
+
+        ntag += 1
+
+    return trained_data
+
+def predict_knn(knn_model, test_data, k):
+    classes = os.listdir(test_data)
+    results = []
+    count = 0
+    accuracy = 0
+    for tag in classes:
+        images_names = os.listdir(test_data + '/' + tag)
+        for image in images_names:
+            k_predictions = compare_image_with_model(knn_model,test_data + '/' + tag + '/' + image, k)
+            prediction = most_common(k_predictions)
+            results.append([prediction, tag])
+            count += 1
+            if prediction == tag:
+                accuracy += 1
+                print 'Predicted class: ' + str(prediction) + ' successfully.'
+
+    accuracy /= count
+    return results, accuracy
+
+def most_common(lst):
+    return max(set(lst), key=lst.count)
+
+def compare_image_with_model(knn_model, image, k):
+
+    gray = cv2.imread(image)
+    gray = cv2.cvtColor(gray,cv2.COLOR_BGR2GRAY)
+    kp_image,des_image = get_N_sift_points(gray,n_points=0)
+
+    all_dist = []
+
+    for item in knn_model:
+
+        current_dist = calculate_distance_from_image_vectors(item[0], des_image)
+        tag = item[1]
+        all_dist.append([current_dist, tag])
+
+    sorted_dists = sorted(all_dist, key = lambda x:x[0])
+
+    return [item[1] for item in sorted_dists[:k]]
+
+
+
 
 if __name__ == '__main__':
 
@@ -166,8 +274,18 @@ if __name__ == '__main__':
     image2 = cv2.imread(imagename2)
     gray2 = cv2.cvtColor(image2,cv2.COLOR_BGR2GRAY)
 
-    matching(gray1, gray2)
+    # Ejercicio 4
 
-    distance = calculate_distance(gray1, gray2)
+    # matching(gray1, gray2)
 
-    print 'Distance between images is ' + str(distance) + '.'
+    #distance = calculate_distance(gray1, gray2)
+    #print 'Distance between images 1 and 2 is ' + str(distance) + '.'
+
+    # Ejercicio 5
+
+    trained_data = train_knn('Train')
+
+    prediction, accuracy = predict_knn(trained_data, 'Test', 5)
+
+    print 'Predicted images, with accuracy: ' + str(accuracy)
+
